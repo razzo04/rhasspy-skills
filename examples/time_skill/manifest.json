@@ -1,0 +1,8 @@
+{
+    "slug": "time_examples",
+    "name": "Time",
+    "version": "1.0.0",
+    "internet_access": false,
+    "languages":["en"],
+    "description":"a simple skill that tell you the time"
+}

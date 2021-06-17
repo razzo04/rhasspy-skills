@@ -1,0 +1,1 @@
+rhasspy-hermes-app==1.1.2

@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+.mypy_cache/
+*.egg-info/
+/build/
+.vscode/
+Dockerfile-alpine
+Dockerfile-debian
+README.md
+.gitingore
+examples/
