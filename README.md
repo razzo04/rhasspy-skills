@@ -10,9 +10,9 @@ docker run -d -p 9090:9090 \
 -e MQTT_PASSWORD=mqttbrokerpassword \
 -e MQTT_USER=mqttuser \
 -e RHASSPY_URL="http://192.168.1.2:12101/api/" \
--v /var/run/docker.sock:/var/run/docker.sock rhasspyskills
+-v /var/run/docker.sock:/var/run/docker.sock razzo04/rhasspyskills
 ```
-Once the container starts, the endpoint documentation should be accessible at http://localhost:9090/docs. It can be used to install new skills, but you can also use curl. A skill is just a tar archive which contains a manifest.json that include information about the skill, a dockerfile, a sentences.ini and other file need by the skill. Skill examples can be found in the [examples]("") folder to download it quickly I also host on [Skynet](https://siasky.net/CAAqMK6puXkps0mehpPZgVmyRZJz3eyJxuZfl1geE6IB2w).
+Once the container starts, the endpoint documentation should be accessible at http://localhost:9090/docs. It can be used to install new skills, but you can also use curl. A skill is just a tar archive which contains a manifest.json that include information about the skill, a dockerfile, a sentences.ini and other file need by the skill. Skill examples can be found in the [examples](https://github.com/razzo04/rhasspy-skills/tree/main/examples) folder to download it quickly I also host on [Skynet](https://siasky.net/CAAqMK6puXkps0mehpPZgVmyRZJz3eyJxuZfl1geE6IB2w).
 ```bash
 wget https://siasky.net/CAAqMK6puXkps0mehpPZgVmyRZJz3eyJxuZfl1geE6IB2w -O time_skill.tar
 ```
