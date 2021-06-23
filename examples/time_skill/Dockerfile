@@ -1,9 +1,16 @@
 FROM python:3.8.10-alpine
 
-COPY requirements.txt /
+RUN mkdir /app
+WORKDIR /app
 
+COPY requirements.txt /
 RUN pip install -r /requirements.txt
 
-COPY time_app.py time_app.py 
+RUN addgroup rhasspy-app \
+    && adduser rhasspy-app --disabled-password --no-create-home --ingroup rhasspy-app \
+    && chown -R rhasspy-app /app
+USER rhasspy-app
 
-CMD [ "python3","time_app.py" ]
+COPY time_app.py /app 
+
+CMD [ "python3","/app/time_app.py" ]

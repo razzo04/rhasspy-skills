@@ -4,7 +4,7 @@ from typing import Optional
 
 from pydantic import BaseSettings
 
-#    log_dest file /var/log/mosquitto.log
+#    log_dest file /var/log/mosquitto/mosquitto.log
 
 class Settings(BaseSettings):
     mqtt_password: Optional[str]
@@ -17,11 +17,12 @@ if __name__ == "__main__":
     settings = Settings()
     template = f'''
     protocol mqtt
-    user root
+    user mosquitto
     log_dest stdout
     log_type all
     persistence true
-    persistence_location /data/
+    persistence_location /var/lib/mosquitto/
+
 
     auth_plugin /mosquitto/go-auth.so
 
