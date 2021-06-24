@@ -6,6 +6,7 @@ from .config import settings
 from argon2 import PasswordHasher
 import docker
 import secrets
+from functools import lru_cache
 
 ph = PasswordHasher()
 db = DB(os.path.join(settings.store_directory, "store.json"))
@@ -26,8 +27,10 @@ def get_skills_dir():
 def get_docker():
     return docker.from_env()
 
-
+@lru_cache()
 def get_temp_directory():
+    if os.path.isdir("/tmp"):
+        return "/tmp"
     temp_dir = os.path.join(settings.store_directory, "temp")
     print(os.listdir())
     if not os.path.isdir(temp_dir):
