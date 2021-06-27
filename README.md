@@ -12,17 +12,8 @@ docker run -d -p 9090:9090 \
 -e RHASSPY_URL="http://192.168.1.2:12101/api/" \
 -v /var/run/docker.sock:/var/run/docker.sock razzo04/rhasspyskills
 ```
-Once the container starts, the endpoint documentation should be accessible at http://localhost:9090/docs. It can be used to install new skills, but you can also use curl. A skill is just a tar archive which contains a manifest.json that include information about the skill, a dockerfile, a sentences.ini and other file need by the skill. Skill examples can be found in the [examples](https://github.com/razzo04/rhasspy-skills/tree/main/examples) folder to download it quickly I also host on [Skynet](https://siasky.net/CAAqMK6puXkps0mehpPZgVmyRZJz3eyJxuZfl1geE6IB2w).
-```bash
-wget https://siasky.net/CAAqMK6puXkps0mehpPZgVmyRZJz3eyJxuZfl1geE6IB2w -O time_skill.tar
-```
-```bash
-curl -X 'POST' \
-    'http://localhost:9090/api/skills' \
-    -H 'accept: application/json' \
-    -H 'Content-Type: multipart/form-data' \
-    -F 'file=@time_skill.tar;type=application/x-tar'
-```
+Once the container starts, the endpoint documentation should be accessible at http://localhost:9090/docs. It can be used to install new skills, but you can also use [rhasspy-skills-cli]("https://github.com/razzo04/rhasspy-skills-cli"). A skill is just a tar archive which contains a manifest.json that include information about the skill, a dockerfile, a sentences.ini and other file need by the skill. Skill examples can be found in the [examples](https://github.com/razzo04/rhasspy-skills-examples) repository. To install a new skill you can follow the guide on [here](https://github.com/razzo04/rhasspy-skills-cli#install-new-skill).
+
 Once the skill is installed rhasspy should be retrained with the new sentences.
 
 This is very experimental so you will find a lot of bugs and some futures are not implemented yet. If you want to report a bug or you have a question you can open an issue or go to [rhasspy community](https://community.rhasspy.org/t/rhasspy-skills-and-mqtt-acl).

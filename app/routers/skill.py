@@ -1,36 +1,26 @@
-import tarfile
 import os
+import shutil
+import tarfile
+from socket import gethostname
 from typing import List, Union
 from urllib.parse import urljoin
-import shutil
-from docker.models.networks import Network
-from socket import gethostname
+
 import httpx
+from app.models import SkillModel
 from docker.client import DockerClient
 from docker.models.containers import Container
-from fastapi import (
-    File,
-    HTTPException,
-    Response,
-    UploadFile,
-    status,
-    APIRouter,
-)
+from docker.models.networks import Network
+from fastapi import (APIRouter, File, HTTPException, Response, UploadFile,
+                     status)
 from fastapi.datastructures import UploadFile
 from fastapi.param_functions import Depends
 from pydantic import ValidationError
-from app.manifest import Manifest
-from app.models import SkillModel
-from ..config import settings
+from rhasspy_skills_cli.manifest import Manifest
 
+from ..config import settings
 from ..database import DB
-from ..dependencies import (
-    create_skill,
-    get_db,
-    get_docker,
-    get_skills_dir,
-    get_temp_directory,
-)
+from ..dependencies import (create_skill, get_db, get_docker, get_skills_dir,
+                            get_temp_directory)
 
 skill_router = APIRouter(
     tags=["skill"],

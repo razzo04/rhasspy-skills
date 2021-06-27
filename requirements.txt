@@ -1,6 +1,7 @@
 argon2-cffi==20.1.0
-fastapi==0.65.1
+fastapi==0.65.2
 uvicorn==0.14.0
 python-multipart==0.0.5
 docker==4.4.3
-httpx==0.18.1
+httpx==0.18.2
+rhasspy-skills-cli==0.1.0
