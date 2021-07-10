@@ -10,7 +10,8 @@ docker run -d -p 9090:9090 \
 -e MQTT_PASSWORD=mqttbrokerpassword \
 -e MQTT_USER=mqttuser \
 -e RHASSPY_URL="http://192.168.1.2:12101/api/" \
--v /var/run/docker.sock:/var/run/docker.sock razzo04/rhasspyskills
+-v /var/run/docker.sock:/var/run/docker.sock \
+-v "$HOME/.config/rhasspyskills/data:/data" razzo04/rhasspyskills
 ```
 Once the container starts, the endpoint documentation should be accessible at http://localhost:9090/docs. It can be used to install new skills, but you can also use [rhasspy-skills-cli](https://github.com/razzo04/rhasspy-skills-cli). A skill is just a tar archive which contains a manifest.json that include information about the skill, a dockerfile, a sentences.ini and other file need by the skill. Skill examples can be found in the [examples](https://github.com/razzo04/rhasspy-skills-examples) repository. To install a new skill you can follow the guide on [here](https://github.com/razzo04/rhasspy-skills-cli#install-new-skill).
 

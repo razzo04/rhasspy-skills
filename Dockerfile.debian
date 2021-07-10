@@ -38,7 +38,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y uuid gosu && ap
 
 RUN mkdir -p /var/lib/mosquitto /var/log/mosquitto /etc/mosquitto
 RUN groupadd -r mosquitto \
-    && useradd -s /sbin/nologin mosquitto -g mosquitto -d /var/lib/mosquitto \
+    && useradd -r -s /sbin/nologin mosquitto -g mosquitto -d /var/lib/mosquitto \
     && chown -R mosquitto:mosquitto /var/log/mosquitto/ \
     && chown -R mosquitto:mosquitto /var/lib/mosquitto/ \
     && chown -R mosquitto:mosquitto /etc/mosquitto
@@ -51,17 +51,18 @@ COPY --from=builder /usr/local/sbin/mosquitto /usr/sbin/mosquitto
 
 EXPOSE 1883
 EXPOSE 9090
+VOLUME ["/data"]
 ENV YARL_NO_EXTENSIONS=1
 
 RUN pip3 install --no-cache-dir setuptools wheel
 COPY requirements.txt requirements.txt
-RUN pip3 install --no-cache-dir --no-binary pydantic -r requirements.txt
+RUN pip3 install --no-cache-dir --no-binary pydantic -r requirements.txt && rm -rf requirements.txt
 RUN pip3 uninstall --yes setuptools wheel
 COPY bin/run.sh run.sh
 COPY app app
 RUN groupadd -r rhasspy-skills \
     && mkdir data \
-    && useradd -s /sbin/nologin rhasspy-skills -g rhasspy-skills \
+    && useradd -r -s /sbin/nologin rhasspy-skills -g rhasspy-skills \
     && chown -R rhasspy-skills:rhasspy-skills /data \
     && chgrp -R rhasspy-skills /app  && chmod 750 -R /app
 

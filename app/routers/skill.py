@@ -47,7 +47,6 @@ async def install_skill(
 ):
     if file is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="file is required")
-
     file_path = os.path.join(get_temp_directory(), file.filename)
     with open(file_path, "wb") as f:
         f.write(await file.read())
@@ -55,7 +54,6 @@ async def install_skill(
         tar = tarfile.open(file_path, "r")
 
     except tarfile.ReadError:
-        # tar.close()
         os.remove(file_path)
         raise HTTPException(400, detail="archive is in a invalid format")
     if not "manifest.json" in tar.getnames():
@@ -97,6 +95,11 @@ async def install_skill(
         finally:
             tar.close()
             os.remove(file_path)
+        data_skill_path = os.path.join(skill_path, "data")
+        os.mkdir(data_skill_path)
+        config_skill_path = os.path.join(skill_path, "config.json")
+        if os.path.isfile(config_skill_path):
+            shutil.copy(config_skill_path,os.path.join(data_skill_path,"config.json"))
         tag = "skills_" + manifest.slug
         containers: List[Container] = docker.containers.list(all=True)
         for container in containers:
@@ -135,6 +138,13 @@ async def install_skill(
             if not is_connected:
                 print("Connecting container")
                 networks[0].connect(self_container, aliases=["mqtt.server"])
+            mounts = docker.api.inspect_container(self_container.id)["Mounts"]
+            path_host = None
+            for mount in mounts:
+                if mount["Destination"] == "/data":
+                    path_host = mount["Source"]
+            
+            bind_path = os.path.join(os.path.abspath(os.path.join(path_host, os.pardir)), data_skill_path.replace("/","",1)) if path_host else None
             container: Container = docker.containers.run(
                 tag,
                 environment={
@@ -145,13 +155,14 @@ async def install_skill(
                 detach=True,
                 name=tag,
                 labels={"skill_name": manifest.slug},
+                volumes={bind_path: {'bind': '/data', 'mode': 'rw'}}
             )
             if manifest.internet_access:
-                # TODO add internet access
-                print("Adding internet access")
+                net_bridge : Network = docker.networks.list(names=["bridge"])[0]
+                net_bridge.connect(container)
         except Exception as e:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
-    except HTTPException:
+    except HTTPException as e:
         print("Error cleaning up installation...")
         tar.close()
         if os.path.isfile(file_path):
@@ -162,27 +173,16 @@ async def install_skill(
 
     if manifest.auto_train:
         # TODO add multi language support
-        senteces_file = os.path.join(skill_path, "sentences.ini")
+        sentences_file = os.path.join(skill_path, "sentences.ini")
         async with httpx.AsyncClient() as client:
-            print(
-                {
-                    r"intents/skills/"
-                    + manifest.slug
-                    + "/"
-                    + "sentences.ini": open(senteces_file, "r").read()
-                }
-            )
             try:
                 res = await client.post(
                     urljoin(settings.rhasspy_url, "sentences"),
                     headers=httpx.Headers(
-                        {"Content-Type": "skill_routerlication/json"}
+                        {"Content-Type": "application/json"}
                     ),
                     json={
-                        r"intents/skills/"
-                        + manifest.slug
-                        + "/"
-                        + "sentences.ini": open(senteces_file, "r").read()
+                        f"intents/skills/{manifest.slug}/sentences.ini": open(sentences_file, "r").read()
                     },
                 )
             except Exception:
