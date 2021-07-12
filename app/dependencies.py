@@ -18,7 +18,6 @@ def get_db():
 
 def get_skills_dir():
     skills_dir = os.path.join(settings.store_directory, "skills")
-
     if not os.path.isdir(skills_dir):
         os.makedirs(skills_dir)
     return skills_dir

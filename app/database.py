@@ -40,3 +40,12 @@ class DB:
         for skill in self.get_skills():
             if skill.skill_name == skill_name:
                 return skill
+
+    def remove_skill(self, skill_name: str) -> bool:
+        skill = self.get_skill(skill_name)
+        if not skill:
+            return False
+        data = self.read_file()
+        data.skills.remove(skill)
+        self.write_file(data)
+        return True

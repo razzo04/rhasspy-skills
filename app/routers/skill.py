@@ -10,6 +10,7 @@ from app.models import SkillModel
 from docker.client import DockerClient
 from docker.models.containers import Container
 from docker.models.networks import Network
+from docker.models.images import Image
 from fastapi import (APIRouter, File, HTTPException, Response, UploadFile,
                      status)
 from fastapi.datastructures import UploadFile
@@ -100,7 +101,7 @@ async def install_skill(
         config_skill_path = os.path.join(skill_path, "config.json")
         if os.path.isfile(config_skill_path):
             shutil.copy(config_skill_path,os.path.join(data_skill_path,"config.json"))
-        tag = "skills_" + manifest.slug
+        tag = "skill_" + manifest.slug
         containers: List[Container] = docker.containers.list(all=True)
         for container in containers:
             if tag == container.name:
@@ -202,11 +203,23 @@ async def install_skill(
 
 
 @skill_router.delete("/skills/{skill_name}")
-def delete_skill(skill_name: str, db: DB = Depends(get_db)):
+def delete_skill(skill_name: str, force: bool = False, db: DB = Depends(get_db), docker: DockerClient = Depends(get_docker)):
     skill = db.get_skill(skill_name)
     if not skill:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="skill not found")
-    # TODO delete from database, stop container if running remove image.
+    containers: List[Container] = docker.containers.list(all=True,filters={"label":f"skill_name={skill_name}"})
+    if len(containers) != 0:
+        container = containers[0]
+        if not force:
+            container.stop()
+        container.remove(v=True, force=force)
+    else:
+        print(f"No container found for {skill_name}")
+    #TODO add support for remote docker image
+    tag = "skill_" + skill_name
+    docker.images.remove(tag,force=force)
+    shutil.rmtree(os.path.join(get_skills_dir(), skill_name))
+    db.remove_skill(skill_name)
 
 
 @skill_router.get(
