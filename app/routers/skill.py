@@ -2,28 +2,45 @@ import os
 import shutil
 import tarfile
 from socket import gethostname
-from typing import List, Union
+from typing import Callable, List, Union
 from urllib.parse import urljoin
 
 import httpx
+from starlette.responses import JSONResponse
 from app.models import SkillModel
 from docker.client import DockerClient
 from docker.models.containers import Container
-from docker.models.networks import Network
 from docker.models.images import Image
+from docker.models.networks import Network
 from fastapi import (APIRouter, File, HTTPException, Response, UploadFile,
-                     status)
+                     status, Request)
 from fastapi.datastructures import UploadFile
 from fastapi.param_functions import Depends
+from fastapi.responses import UJSONResponse
 from pydantic import ValidationError
 from rhasspy_skills_cli.manifest import Manifest
+from fastapi.routing import APIRoute
+
+from .exceptions import SkillInstallException
 
 from ..config import settings
 from ..database import DB
 from ..dependencies import (create_skill, get_db, get_docker, get_skills_dir,
                             get_temp_directory)
 
+
+class APIRouteExceptionHandling(APIRoute):
+    def get_route_handler(self) -> Callable:
+        original_route_handler = super().get_route_handler()
+        async def custom_route_handler(request: Request) -> Response:
+            try:
+                return await original_route_handler(request)
+            except SkillInstallException as exc:
+                return JSONResponse(status_code=exc.status_code, content={"detail":exc.detail,"error_code":exc.error_code})
+        return custom_route_handler
+
 skill_router = APIRouter(
+    route_class=APIRouteExceptionHandling,
     tags=["skill"],
     responses={
         404: {"detail": "Skill not found"},
@@ -39,15 +56,15 @@ def get_skills(db: DB = Depends(get_db)):
 def get_skill(name: str, db: DB = Depends(get_db)) -> Union[SkillModel, None]:
     return db.get_skill(name)
 
-
 @skill_router.post("/skills", responses={400: {"detail":"file is required"}})
 async def install_skill(
     file: UploadFile = File(None),
+    force: bool = False,
     db: DB = Depends(get_db),
     docker: DockerClient = Depends(get_docker),
 ):
     if file is None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="file is required")
+        raise SkillInstallException(status.HTTP_400_BAD_REQUEST, detail="file is required", error_code="file_required")
     file_path = os.path.join(get_temp_directory(), file.filename)
     with open(file_path, "wb") as f:
         f.write(await file.read())
@@ -56,41 +73,46 @@ async def install_skill(
 
     except tarfile.ReadError:
         os.remove(file_path)
-        raise HTTPException(400, detail="archive is in a invalid format")
+        raise SkillInstallException(400, detail="archive is in a invalid format", error_code="invalid_archive")
     if not "manifest.json" in tar.getnames():
         tar.close()
         os.remove(file_path)
-        raise HTTPException(400, detail="the archive do not contain a manifest.json")
+        raise SkillInstallException(400, detail="the archive do not contain a manifest.json", error_code="manifest_not_present")
     manifest_tar = tar.extractfile("manifest.json")
     try:
         manifest = Manifest.parse_raw(manifest_tar.read())
     except ValidationError as e:
         tar.close()
         os.remove(file_path)
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=e.errors())
+        raise SkillInstallException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=e.errors(), error_code="invalid_manifest")
     skill_path = os.path.join(get_skills_dir(), manifest.slug)
     try:
         is_dockerFile = not "Dockerfile" in tar.getnames()
         print(f"{not manifest.image} and {is_dockerFile}")
         if not manifest.image and not ("Dockerfile" in tar.getnames()):
-            raise HTTPException(
+            raise SkillInstallException(
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="no dockerfile and image detected",
+                error_code="image_not_present"
             )
         # TODO add multi language support
         if not "sentences.ini" in tar.getnames():
-            raise HTTPException(
+            raise SkillInstallException(
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="the archive do not contain a sentences.ini",
+                error_code="sentences_not_present"
             )
         try:
             os.mkdir(skill_path)
         except FileExistsError:
-            # TODO if skill already exist do not delete it
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="skill with the same name already exist",
-            )
+            if force:
+                shutil.rmtree(skill_path)
+            else:
+                raise SkillInstallException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="skill with the same name already exist",
+                    error_code="skill_already_installed"
+                )
         try:
             tar.extractall(skill_path)
         finally:
@@ -105,16 +127,21 @@ async def install_skill(
         containers: List[Container] = docker.containers.list(all=True)
         for container in containers:
             if tag == container.name:
-                raise HTTPException(
-                    status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail=f"The container name {tag} is already in use by another container {container.id}",
-                )
+                if force:
+                    container.remove(force=True)
+                else:    
+                    raise SkillInstallException(
+                        status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail=f"The container name {tag} is already in use by another container {container.id}",
+                        error_code="container_name_already_used"
+                    )
         try:
             image = docker.images.build(path=skill_path, tag=tag)
         except Exception as e:
-            raise HTTPException(
+            raise SkillInstallException(
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"failed to build image. Error: {str(e)}",
+                error_code="build_image"
             )
 
         try:
@@ -162,13 +189,14 @@ async def install_skill(
                 net_bridge : Network = docker.networks.list(names=["bridge"])[0]
                 net_bridge.connect(container)
         except Exception as e:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
-    except HTTPException as e:
+            raise SkillInstallException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e), error_code="container_creation")
+    except SkillInstallException as e:
         print("Error cleaning up installation...")
         tar.close()
         if os.path.isfile(file_path):
             os.remove(file_path)
-        if os.path.isdir(skill_path):
+        if e.error_code != "skill_already_installed" and os.path.isdir(skill_path):
+            db.remove_skill(manifest.slug)
             shutil.rmtree(skill_path)
         raise
 
@@ -200,6 +228,7 @@ async def install_skill(
             # train and restart rhasspy
             await client.post(urljoin(settings.rhasspy_url, "train"))
             await client.post(urljoin(settings.rhasspy_url, "restart"))
+    return {"state":"success", "detail": f"installed {manifest.name} in {skill_path}"}
 
 
 @skill_router.delete("/skills/{skill_name}")
@@ -220,6 +249,7 @@ def delete_skill(skill_name: str, force: bool = False, db: DB = Depends(get_db),
     docker.images.remove(tag,force=force)
     shutil.rmtree(os.path.join(get_skills_dir(), skill_name))
     db.remove_skill(skill_name)
+    return {"state":"success", "detail": f"uninstalled {skill_name}"}
 
 
 @skill_router.get(
