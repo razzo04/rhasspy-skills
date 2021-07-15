@@ -232,7 +232,7 @@ async def install_skill(
 
 
 @skill_router.delete("/skills/{skill_name}")
-def delete_skill(skill_name: str, force: bool = False, db: DB = Depends(get_db), docker: DockerClient = Depends(get_docker)):
+async def delete_skill(skill_name: str, force: bool = False, db: DB = Depends(get_db), docker: DockerClient = Depends(get_docker)):
     skill = db.get_skill(skill_name)
     if not skill:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="skill not found")
@@ -249,6 +249,16 @@ def delete_skill(skill_name: str, force: bool = False, db: DB = Depends(get_db),
     docker.images.remove(tag,force=force)
     shutil.rmtree(os.path.join(get_skills_dir(), skill_name))
     db.remove_skill(skill_name)
+    async with httpx.AsyncClient() as client:
+        await client.post(
+            urljoin(settings.rhasspy_url, "sentences"),
+            headers=httpx.Headers(
+                {"Content-Type": "application/json"}
+            ),
+            json={f"intents/skills/{skill_name}/sentences.ini": ""},
+        )
+        await client.post(urljoin(settings.rhasspy_url, "train"))
+        await client.post(urljoin(settings.rhasspy_url, "restart"))
     return {"state":"success", "detail": f"uninstalled {skill_name}"}
 
 
