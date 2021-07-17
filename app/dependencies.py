@@ -1,6 +1,8 @@
+from docker.client import DockerClient
+from docker.models.containers import Container
 from app.models import SkillModel
 import os
-from typing import Dict, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 from app.database import DB
 from .config import settings
 from argon2 import PasswordHasher
@@ -25,6 +27,14 @@ def get_skills_dir():
 
 def get_docker():
     return docker.from_env()
+
+def get_container_by_skill_name(docker: DockerClient, skill_name: str) -> Union[Container, None]:
+    containers: List[Container] = docker.containers.list(
+        all=True, filters={"label": f"skill_name={skill_name}"}
+    )
+    if len(containers) != 0:
+        return containers[0]
+    return None
 
 @lru_cache()
 def get_temp_directory():
