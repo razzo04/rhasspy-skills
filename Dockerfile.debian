@@ -58,7 +58,7 @@ RUN pip3 install --no-cache-dir setuptools wheel
 COPY requirements.txt requirements.txt
 RUN pip3 install --no-cache-dir --no-binary pydantic -r requirements.txt && rm -rf requirements.txt
 RUN pip3 uninstall --yes setuptools wheel
-COPY bin/run.sh run.sh
+COPY bin bin
 COPY app app
 RUN groupadd -r rhasspy-skills \
     && mkdir data \
@@ -66,4 +66,4 @@ RUN groupadd -r rhasspy-skills \
     && chown -R rhasspy-skills:rhasspy-skills /data \
     && chgrp -R rhasspy-skills /app  && chmod 750 -R /app
 
-ENTRYPOINT [ "bash", "run.sh"]
+ENTRYPOINT [ "bash", "bin/run.sh"]
