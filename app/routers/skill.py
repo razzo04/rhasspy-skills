@@ -68,6 +68,7 @@ async def install_skill(
     force: bool = False,
     db: DB = Depends(get_db),
     docker: DockerClient = Depends(get_docker),
+    start_on_boot: bool = False
 ):
     if file is None:
         raise SkillInstallException(
@@ -183,7 +184,7 @@ async def install_skill(
             container: Container = docker.containers.run(
                 tag,
                 environment={
-                    "MQTT_PASS": create_skill(db, manifest.slug, manifest.topic_access),
+                    "MQTT_PASS": create_skill(db, manifest.slug, manifest.topic_access, start_on_boot),
                     "MQTT_USER": manifest.slug,
                 },
                 network="mqtt-net",
@@ -265,14 +266,20 @@ async def delete_skill(
     docker.images.remove(tag, force=force)
     shutil.rmtree(os.path.join(get_skills_dir(), skill_name))
     db.remove_skill(skill_name)
-    async with httpx.AsyncClient() as client:
-        await client.post(
-            urljoin(settings.rhasspy_url, "sentences"),
-            headers=httpx.Headers({"Content-Type": "application/json"}),
-            json={f"intents/skills/{skill_name}/sentences.ini": ""},
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(
+                urljoin(settings.rhasspy_url, "sentences"),
+                headers=httpx.Headers({"Content-Type": "application/json"}),
+                json={f"intents/skills/{skill_name}/sentences.ini": ""},
+            )
+            await client.post(urljoin(settings.rhasspy_url, "train"))
+            await client.post(urljoin(settings.rhasspy_url, "restart"))
+    except Exception:
+        raise HTTPException(
+            status.HTTP_424_FAILED_DEPENDENCY,
+            detail="unable to comunicate with rhasspy",
         )
-        await client.post(urljoin(settings.rhasspy_url, "train"))
-        await client.post(urljoin(settings.rhasspy_url, "restart"))
     return {"state": "success", "detail": f"uninstalled {skill_name}"}
 
 

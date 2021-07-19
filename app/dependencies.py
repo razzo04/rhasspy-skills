@@ -48,7 +48,7 @@ def get_temp_directory():
     return temp_dir
 
 
-def create_skill(db: DB, slug: str, topic_access: Union[None, Dict[str, int]]) -> str:
+def create_skill(db: DB, slug: str, topic_access: Union[None, Dict[str, int]], start_on_boot: bool) -> str:
     """create a skill and then insert in the database
 
     Args:
@@ -66,6 +66,7 @@ def create_skill(db: DB, slug: str, topic_access: Union[None, Dict[str, int]]) -
             skill_name=slug,
             hashed_password=hash_password,
             topic_access=topic_access,
+            start_on_boot=start_on_boot,
         )
     )
     return password

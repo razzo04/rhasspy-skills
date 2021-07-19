@@ -11,6 +11,7 @@ class TopicAccess(IntEnum):
 class SkillModel(BaseModel):
     skill_name: str
     hashed_password: str
+    start_on_boot: bool = False
     topic_access: Optional[Dict[str, TopicAccess]] = {}
     class Config:
         use_enum_values = True

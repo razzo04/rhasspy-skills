@@ -18,4 +18,9 @@ then
 fi
 python3 bin/setup_network.py
 python3 bin/generate_config.py
-gosu rhasspy-skills uvicorn app.main:app --port 9090 --host 0.0.0.0 & gosu mosquitto:mosquitto mosquitto -c /etc/mosquitto/mosquitto.conf
+
+gosu rhasspy-skills uvicorn app.main:app --port 9090 --host 0.0.0.0 & 
+gosu mosquitto:mosquitto mosquitto -c /etc/mosquitto/mosquitto.conf &
+sleep 5
+python3 -m app.start_skills
+wait
