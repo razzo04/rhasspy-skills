@@ -1,10 +1,10 @@
 from app.models import DBFile, SkillModel
-from typing import Any, Dict, List, Union
+from typing import List, Union
 import os
-import json
+
 
 class DB:
-    def __init__(self, path: str, use_cache = False) -> None:
+    def __init__(self, path: str, use_cache=False) -> None:
         self.path = path
         self.use_cache = use_cache
         if not os.path.isfile(path):
@@ -29,6 +29,7 @@ class DB:
 
     def read_file(self) -> DBFile:
         return DBFile.parse_file(self.path)
+
     def write_file(self, data: DBFile):
         with open(self.path, "w") as f:
             f.write(data.json())
