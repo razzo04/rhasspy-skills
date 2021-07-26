@@ -101,11 +101,6 @@ def test_install_skill(tmp_dir: pathlib.Path, httpx_mock: HTTPXMock):
         files={"file": get_test_resource("manifest_docker_sentences.tar").read_bytes()},
     )
     install_path = response.json()["detail"].replace(f"installed {slug} in", "").strip()
-    if platform != "win32":
-        assert (
-            install_path.replace("\\", "/")
-            == tmp_dir.joinpath("skills/weather").as_posix()
-        )
     assert response.json()["state"] == "success"
     db.insert_skill.assert_called_once_with(
         SkillModel(
