@@ -25,13 +25,14 @@ from pydantic import ValidationError
 from rhasspy_skills_cli.manifest import Manifest
 from starlette.responses import JSONResponse
 
-from ..config import settings
+from ..config import Settings
 from ..database import DB
 from ..dependencies import (
     create_skill,
     get_container_by_skill_name,
     get_db,
     get_docker,
+    get_settings,
     get_skills_dir,
     get_temp_directory,
 )
@@ -79,6 +80,8 @@ async def install_skill(
     db: DB = Depends(get_db),
     docker: DockerClient = Depends(get_docker),
     temp_directory: str = Depends(get_temp_directory),
+    settings: Settings = Depends(get_settings),
+    skill_dir=Depends(get_skills_dir),
     start_on_boot: bool = False,
 ):
     if file is None:
@@ -119,7 +122,7 @@ async def install_skill(
             detail=e.errors(),
             error_code="invalid_manifest",
         )
-    skill_path = os.path.join(get_skills_dir(), manifest.slug)
+    skill_path = os.path.join(skill_dir, manifest.slug)
     try:
         if not manifest.image and not ("Dockerfile" in tar.getnames()):
             raise SkillInstallException(
@@ -265,6 +268,7 @@ async def delete_skill(
     force: bool = False,
     db: DB = Depends(get_db),
     docker: DockerClient = Depends(get_docker),
+    settings: Settings = Depends(get_settings),
 ):
     skill = db.get_skill(skill_name)
     if not skill:

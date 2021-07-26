@@ -2,13 +2,17 @@ import pathlib
 from docker.models.containers import Container
 from docker.models.networks import Network
 from fastapi.testclient import TestClient
+
+from ..config import Settings
 from ..main import app
-from ..dependencies import get_db, get_docker, get_temp_directory
+from ..dependencies import get_db, get_docker, get_settings, get_temp_directory
 from ..models import SkillModel
 from unittest.mock import Mock
+from sys import platform
 import os
 from pathlib import Path
 from pytest_httpx import HTTPXMock
+import pytest
 
 db = Mock()
 docker = Mock()
@@ -32,7 +36,17 @@ def get_test_resource(name: str) -> Path:
     return Path(os.path.join(os.path.dirname(__file__), "testresources", name))
 
 
-def test_install_skill_invalid_archive():
+@pytest.fixture(scope="session")
+def tmp_dir(tmp_path_factory: pytest.TempPathFactory):
+    tmp_path = tmp_path_factory.getbasetemp()
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        store_directory=tmp_path.as_posix()
+    )
+    app.dependency_overrides[get_temp_directory] = lambda: tmp_path.resolve()
+    return tmp_path
+
+
+def test_install_skill_invalid_archive(tmp_dir: pathlib.Path):
     response = client.post("/api/skills", files={"file": b"invalid data"})
     assert response.status_code == 400
     assert response.json()["error_code"] == "invalid_archive"
@@ -41,7 +55,7 @@ def test_install_skill_invalid_archive():
     docker.containers.run.assert_not_called()
 
 
-def test_install_skill_invalid_manifest():
+def test_install_skill_invalid_manifest(tmp_dir: pathlib.Path):
     response = client.post(
         "/api/skills",
         files={"file": get_test_resource("invalid_manifest.tar").read_bytes()},
@@ -53,7 +67,7 @@ def test_install_skill_invalid_manifest():
     docker.containers.run.assert_not_called()
 
 
-def test_install_skill_no_image():
+def test_install_skill_no_image(tmp_dir: pathlib.Path):
     response = client.post(
         "/api/skills",
         files={"file": get_test_resource("manifest_correct.tar").read_bytes()},
@@ -65,8 +79,7 @@ def test_install_skill_no_image():
     docker.containers.run.assert_not_called()
 
 
-def test_install_skill(tmp_path: pathlib.Path, httpx_mock: HTTPXMock):
-    app.dependency_overrides[get_temp_directory] = lambda: tmp_path.absolute()
+def test_install_skill(tmp_dir: pathlib.Path, httpx_mock: HTTPXMock):
     # TODO check request
     httpx_mock.add_response(method="POST")
     slug = "weather"
@@ -88,7 +101,11 @@ def test_install_skill(tmp_path: pathlib.Path, httpx_mock: HTTPXMock):
         files={"file": get_test_resource("manifest_docker_sentences.tar").read_bytes()},
     )
     install_path = response.json()["detail"].replace(f"installed {slug} in", "").strip()
-    assert install_path.replace("\\", "/") == f"/path/to/data/skills/{slug}"
+    if platform != "win32":
+        assert (
+            install_path.replace("\\", "/")
+            == tmp_dir.joinpath("skills/weather").as_posix()
+        )
     assert response.json()["state"] == "success"
     db.insert_skill.assert_called_once_with(
         SkillModel(

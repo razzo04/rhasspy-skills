@@ -1,10 +1,11 @@
 from docker.client import DockerClient
 from docker.models.containers import Container
+from fastapi.param_functions import Depends
 from app.models import SkillModel
 import os
+from . import config
 from typing import Dict, List, Union
 from app.database import DB
-from .config import settings
 from argon2 import PasswordHasher
 import docker
 import secrets
@@ -13,11 +14,16 @@ from functools import lru_cache
 ph = PasswordHasher()
 
 
-def get_db() -> DB:
+@lru_cache()
+def get_settings():
+    return config.Settings()
+
+
+def get_db(settings: config.Settings = Depends(get_settings)) -> DB:
     yield DB(os.path.join(settings.store_directory, "store.json"))
 
 
-def get_skills_dir():
+def get_skills_dir(settings: config.Settings = Depends(get_settings)):
     skills_dir = os.path.join(settings.store_directory, "skills")
     if not os.path.isdir(skills_dir):
         os.makedirs(skills_dir)
@@ -40,7 +46,7 @@ def get_container_by_skill_name(
 
 
 @lru_cache()
-def get_temp_directory() -> str:
+def get_temp_directory(settings: config.Settings = Depends(get_settings)) -> str:
     if os.path.isdir("/tmp"):
         return "/tmp"
     temp_dir = os.path.join(settings.store_directory, "temp")
