@@ -4,6 +4,7 @@ import tarfile
 from socket import gethostname
 from typing import Callable, List, Union
 from urllib.parse import urljoin
+from attr import s
 
 import httpx
 from app.models import SkillModel
@@ -33,6 +34,7 @@ from ..dependencies import (
     get_db,
     get_docker,
     get_settings,
+    get_skill,
     get_skills_dir,
     get_temp_directory,
 )
@@ -67,10 +69,6 @@ skill_router = APIRouter(
 @skill_router.get("/skills")
 def get_skills(db: DB = Depends(get_db)):
     return db.get_skills()
-
-
-def get_skill(name: str, db: DB = Depends(get_db)) -> Union[SkillModel, None]:
-    return db.get_skill(name)
 
 
 @skill_router.post("/skills", responses={400: {"detail": "file is required"}})
@@ -269,11 +267,8 @@ async def delete_skill(
     db: DB = Depends(get_db),
     docker: DockerClient = Depends(get_docker),
     settings: Settings = Depends(get_settings),
+    skill: SkillModel = Depends(get_skill)
 ):
-    skill = db.get_skill(skill_name)
-    if not skill:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="skill not found")
-
     container = get_container_by_skill_name(docker, skill_name)
     if container:
         if not force:
@@ -312,10 +307,8 @@ async def stop_skill(
     force: bool = False,
     db: DB = Depends(get_db),
     docker: DockerClient = Depends(get_docker),
+    skill: SkillModel = Depends(get_skill)
 ):
-    skill = db.get_skill(skill_name)
-    if not skill:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="skill not found")
     container = get_container_by_skill_name(docker, skill_name)
     if container:
         if container.status == "running":
@@ -351,10 +344,8 @@ async def start_skill(
     skill_name: str,
     db: DB = Depends(get_db),
     docker: DockerClient = Depends(get_docker),
+    skill: SkillModel = Depends(get_skill)
 ):
-    skill = db.get_skill(skill_name)
-    if not skill:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="skill not found")
     container = get_container_by_skill_name(docker, skill_name)
     if container:
         if container.status == "running":
@@ -388,10 +379,6 @@ async def start_skill(
     responses={404: {"message": "skill not found"}},
 )
 def get_skill_by_name(
-    skill_name: str, response: Response, db: DB = Depends(get_db)
+    skill: SkillModel = Depends(get_skill)
 ) -> Union[SkillModel, None]:
-    skill = db.get_skill(skill_name)
-    if skill:
-        return skill
-    else:
-        response.status_code = status.HTTP_404_NOT_FOUND
+    return skill

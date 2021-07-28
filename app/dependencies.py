@@ -1,6 +1,7 @@
 from docker.client import DockerClient
 from docker.models.containers import Container
 from fastapi.param_functions import Depends
+from fastapi import HTTPException, status
 from app.models import SkillModel
 import os
 from . import config
@@ -33,6 +34,11 @@ def get_skills_dir(settings: config.Settings = Depends(get_settings)):
 def get_docker() -> DockerClient:
     return docker.from_env()
 
+def get_skill(skill_name: str, db: DB = Depends(get_db)) -> SkillModel:
+    skill = db.get_skill(skill_name)
+    if not skill:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="skill not found")
+    return skill
 
 def get_container_by_skill_name(
     docker: DockerClient, skill_name: str
