@@ -4,13 +4,13 @@ import tarfile
 from socket import gethostname
 from typing import Callable, List, Union
 from urllib.parse import urljoin
-from attr import s
 
 import httpx
 from app.models import SkillModel
 from docker.client import DockerClient
 from docker.models.containers import Container
 from docker.models.networks import Network
+from docker.errors import ImageNotFound
 from fastapi import (
     APIRouter,
     File,
@@ -267,6 +267,7 @@ async def delete_skill(
     db: DB = Depends(get_db),
     docker: DockerClient = Depends(get_docker),
     settings: Settings = Depends(get_settings),
+    skills_dir = Depends(get_skills_dir),
     skill: SkillModel = Depends(get_skill)
 ):
     container = get_container_by_skill_name(docker, skill_name)
@@ -278,8 +279,12 @@ async def delete_skill(
         print(f"No container found for {skill_name}")
     # TODO add support for remote docker image
     tag = "skill_" + skill_name
-    docker.images.remove(tag, force=force)
-    shutil.rmtree(os.path.join(get_skills_dir(), skill_name))
+    try:
+        docker.images.remove(tag, force=force)
+    except ImageNotFound:
+        if not force:
+            raise
+    shutil.rmtree(os.path.join(skills_dir, skill_name))
     db.remove_skill(skill_name)
     try:
         async with httpx.AsyncClient() as client:
