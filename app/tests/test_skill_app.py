@@ -1,4 +1,7 @@
+import io
+import json
 import pathlib
+import tarfile
 from docker.models.containers import Container
 from docker.models.networks import Network
 from fastapi.testclient import TestClient
@@ -123,3 +126,64 @@ def test_install_skill(tmp_dir: pathlib.Path, httpx_mock: HTTPXMock):
         labels={"skill_name": slug},
         volumes={os.path.join(install_path, "data"): {"bind": "/data", "mode": "rw"}},
     )
+
+
+def _skill_tar(extra=None) -> bytes:
+    """A minimal valid skill archive, plus any extra member (name, bytes | linkname)."""
+    buffer = io.BytesIO()
+    files = {
+        "manifest.json": json.dumps(
+            {"name": "weather", "slug": "weather", "version": "1.0.0"}
+        ).encode(),
+        "Dockerfile": b"FROM scratch\n",
+        "sentences.ini": b"[weather]\nwhat is the weather\n",
+    }
+    with tarfile.open(fileobj=buffer, mode="w") as tar:
+        for name, data in files.items():
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            tar.addfile(info, io.BytesIO(data))
+        if extra is not None:
+            name, payload = extra
+            info = tarfile.TarInfo(name)
+            if isinstance(payload, bytes):
+                info.size = len(payload)
+                tar.addfile(info, io.BytesIO(payload))
+            else:
+                info.type = tarfile.SYMTYPE
+                info.linkname = payload
+                tar.addfile(info)
+    return buffer.getvalue()
+
+
+def test_install_skill_rejects_member_outside_skill_directory(tmp_dir: pathlib.Path):
+    db.reset_mock()
+    docker.reset_mock()
+
+    response = client.post(
+        "/api/skills?force=true",
+        files={"file": _skill_tar(("../../escaped-skill-file.txt", b"pwned"))},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error_code"] == "archive_entry_outside_skill"
+    assert not (tmp_dir / "escaped-skill-file.txt").exists()
+    assert not (tmp_dir / "skills" / "escaped-skill-file.txt").exists()
+    assert not (tmp_dir / "skills" / "weather").exists()
+    db.insert_skill.assert_not_called()
+    docker.containers.run.assert_not_called()
+
+
+def test_install_skill_rejects_archive_links(tmp_dir: pathlib.Path):
+    db.reset_mock()
+    docker.reset_mock()
+
+    response = client.post(
+        "/api/skills?force=true",
+        files={"file": _skill_tar(("payload", "/etc/passwd"))},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error_code"] == "archive_entry_outside_skill"
+    assert not (tmp_dir / "skills" / "weather" / "payload").exists()
+    db.insert_skill.assert_not_called()

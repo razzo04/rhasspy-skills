@@ -66,6 +66,36 @@ skill_router = APIRouter(
 )
 
 
+def _archive_escape_error(detail: str) -> SkillInstallException:
+    return SkillInstallException(
+        status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail=detail,
+        error_code="archive_entry_outside_skill",
+    )
+
+
+def _safe_extract_skill_archive(tar: tarfile.TarFile, skill_path: str) -> None:
+    """Extract a skill archive without letting a member write outside skill_path.
+
+    ``TarFile.extractall`` joins each member name onto the destination as-is, so
+    a member called ``../../.ssh/authorized_keys`` (or a symlink member that a
+    later member is written through) escapes the directory the skill is being
+    installed into.
+    """
+    root = os.path.realpath(skill_path)
+    for member in tar.getmembers():
+        if member.issym() or member.islnk() or member.isdev():
+            raise _archive_escape_error(
+                f"the archive contains a link or device entry: {member.name}"
+            )
+        target = os.path.realpath(os.path.join(root, member.name))
+        if os.path.commonpath([root, target]) != root:
+            raise _archive_escape_error(
+                f"the archive entry {member.name} would be extracted outside the skill directory"
+            )
+    tar.extractall(skill_path)
+
+
 @skill_router.get("/skills")
 def get_skills(db: DB = Depends(get_db)):
     return db.get_skills()
@@ -120,6 +150,19 @@ async def install_skill(
             detail=e.errors(),
             error_code="invalid_manifest",
         )
+    if (
+        not manifest.slug
+        or "/" in manifest.slug
+        or "\\" in manifest.slug
+        or manifest.slug in (".", "..")
+    ):
+        tar.close()
+        os.remove(file_path)
+        raise SkillInstallException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="the manifest slug must be a plain directory name",
+            error_code="invalid_manifest",
+        )
     skill_path = os.path.join(skill_dir, manifest.slug)
     try:
         if not manifest.image and not ("Dockerfile" in tar.getnames()):
@@ -147,7 +190,11 @@ async def install_skill(
                     error_code="skill_already_installed",
                 )
         try:
-            tar.extractall(skill_path)
+            try:
+                _safe_extract_skill_archive(tar, skill_path)
+            except SkillInstallException:
+                shutil.rmtree(skill_path, ignore_errors=True)
+                raise
         finally:
             tar.close()
             os.remove(file_path)
